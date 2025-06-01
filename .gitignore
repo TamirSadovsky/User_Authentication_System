@@ -2,10 +2,10 @@
 backend/__pycache__/
 backend/*.pyc
 backend/*.pyo
+backend/utils/__pycache__/
 
 # Virtual environments
 .venv/
-venv/
 
 # Databases
 *.db
@@ -17,5 +17,4 @@ instance/
 # IDEs
 .vscode/
 
-# Logs
-*.log
+
