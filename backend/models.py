@@ -9,6 +9,12 @@ class User(db.Model):
     email = db.Column(db.String(150), nullable=False, unique=True)
     password = db.Column(db.String(150), nullable=False)
 
+    # email verification
+    is_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(150), nullable=True, unique=True)
+    verification_token_expiry = db.Column(db.DateTime, nullable=True)
+
+    
     # For profile information
     full_name = db.Column(db.String(150), nullable=True)
     phone_number = db.Column(db.String(20), nullable=True)
