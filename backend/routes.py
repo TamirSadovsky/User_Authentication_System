@@ -2,26 +2,37 @@ from flask import Blueprint, request, jsonify
 from models import User, db
 from utils.validators import is_valid_email, is_valid_password
 from datetime import datetime, timedelta
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager #pip install Flask-JWT-Extended
+from flask_jwt_extended import (
+    create_access_token,
+    get_jwt,
+    get_jwt_identity,
+    unset_jwt_cookies,
+    jwt_required,
+    JWTManager,
+)  # pip install Flask-JWT-Extended
 import uuid
 import bcrypt
 from utils.email_utils import send_verification_email, generate_verification_code
+from flask import render_template
 
-app_routes = Blueprint('app_routes', __name__)
 
-@app_routes.route('/', methods=['GET'])
+app_routes = Blueprint("app_routes", __name__)
+
+
+@app_routes.route("/", methods=["GET"])
 def home():
-    return "Drivenets - Assignment", 200
+    return "User Authentication System - Assignment", 200
 
-@app_routes.route('/signup', methods = ['POST'])
+
+@app_routes.route("/signup", methods=["POST"])
 def signup():
     try:
-        email = request.json.get('email')
-        password = request.json.get('password')
+        email = request.json.get("email")
+        password = request.json.get("password")
         if not email or not password:
             return jsonify({"error": "Missing credentials"}), 400
         # Check if the email already exists
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = User.query.filter_by(email=email.lower()).first()
         if existing_user:
             return jsonify({"error": "Email already exists"}), 400
         if not is_valid_email(email):
@@ -33,20 +44,21 @@ def signup():
         # Hash the password using bcrypt
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(password.encode(), salt).decode()
-        verification_code = generate_verification_code()
-        send_verification_email(email, verification_code)
+        verification_token = str(uuid.uuid4())
+        send_verification_email(email, verification_token)
 
         # Create a new user instance
         user = User(
             id=user_id,
-            email=email,
+            email=email.lower(),
             password=hashed_password,
-            verification_token=verification_code,
+            verification_token=verification_token,
+            verification_token_expiry=datetime.utcnow() + timedelta(hours=1),
         )
 
         db.session.add(user)
         db.session.commit()
-        return jsonify({"message": "User registered"}), 201
+        return jsonify({"message": "User registered"}), 200
     except Exception as e:
         print("Unexpected error:", e)
         return jsonify({"error": "Internal server error"}), 500
@@ -56,9 +68,11 @@ def signup():
 def create_token():
     email = request.json.get("email", None)
     password = request.json.get("password", None)
+    remember = request.json.get("remember", False)  # ⬅️ חדש
 
     if email is None or password is None:
         return jsonify({"error": "Missing Credentials"}), 401
+
     user = User.query.filter_by(email=email).first()
     if user is None:
         return jsonify({"error": "User not found"}), 404
@@ -67,12 +81,11 @@ def create_token():
     if not bcrypt.checkpw(password.encode(), user.password.encode()):
         return jsonify({"error": "Invalid Credentials"}), 401
 
-    access_token = create_access_token(identity=user.id, expires_delta=timedelta(minutes=7))
+    expires = timedelta(days=30) if remember else timedelta(minutes=7)
+    access_token = create_access_token(identity=user.id, expires_delta=expires)
 
-    return jsonify({
-        "email": email,
-        "access_token": access_token
-    }), 200
+    return jsonify({"email": email, "access_token": access_token}), 200
+
 
 @app_routes.route("/logout", methods=["POST"])
 @jwt_required()
@@ -83,6 +96,7 @@ def logout():
     response = jsonify({"message": "Successfully logged out"})
     unset_jwt_cookies(response)
     return response, 200
+
 
 @app_routes.route("/profile", methods=["GET"])
 @jwt_required()
@@ -97,9 +111,11 @@ def get_profile():
         "email": user.email,
         "full_name": user.full_name,
         "phone_number": user.phone_number,
-        "address": user.address
+        "address": user.address,
     }
     return jsonify(profile_data), 200
+
+
 @app_routes.route("/profile", methods=["PUT"])
 @jwt_required()
 def update_profile():
@@ -116,24 +132,6 @@ def update_profile():
     db.session.commit()
     return jsonify({"message": "Profile updated successfully"}), 200
 
-@app_routes.route("/email_verification", methods=["POST"])
-def email_verification():
-    email = request.json.get("email")
-    code = request.json.get("code")
-    if email is None or code is None:
-        return jsonify({"error": "Missing credentials"}), 400
-    user = User.query.filter_by(email=email).first()
-    if user is None:
-        return jsonify({"error": "User not found"}), 404
-    if code != user.verification_token:
-        return jsonify({"error": "Invalid verification code"}), 400
-
-    user.is_verified = True
-    user.verification_token = None
-    user.verification_token_expiry = None
-    db.session.commit()
-
-    return jsonify({"message": "Email verified successfully"}), 200
 
 @app_routes.route("/resend_verification", methods=["POST"])
 def resend_verification():
@@ -155,6 +153,7 @@ def resend_verification():
 
     return jsonify({"message": "Verification email resent"}), 200
 
+
 @app_routes.route("/password_reset", methods=["POST"])
 def password_reset():
     email = request.json.get("email")
@@ -174,6 +173,8 @@ def password_reset():
     db.session.commit()
 
     return jsonify({"message": "Password reset email sent"}), 200
+
+
 @app_routes.route("/reset_password", methods=["POST"])
 def reset_password():
     email = request.json.get("email")
@@ -199,3 +200,21 @@ def reset_password():
     db.session.commit()
 
     return jsonify({"message": "Password reset successfully"}), 200
+
+
+@app_routes.route("/verify", methods=["GET"])
+def verify_email():
+    token = request.args.get("token")
+    if not token:
+        return jsonify({"error": "Missing token"}), 400
+
+    user = User.query.filter_by(verification_token=token).first()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 404
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expiry = None
+    db.session.commit()
+
+    return render_template("verify_success.html", email=user.email)

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Verifying...</title>
+</head>
+<body>
+  <h3 id="status">Verifying...</h3>
+
+  <script>
+    const status = document.getElementById("status");
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token");
+
+    fetch(`http://127.0.0.1:5000/verify?token=${token}`)
+      .then(res => {
+        if (res.redirected) {
+          window.location.href = res.url;
+        } else {
+          status.innerText = "Something went wrong.";
+        }
+      })
+      .catch(err => {
+        status.innerText = "Network error.";
+      });
+  </script>
+</body>
+</html>
+<script>
+    // Redirect to the home page after 5 seconds
+    setTimeout(() => {
+      window.location.href = "http://127.0.0.1:5000/";
+    }, 5000);
+  </script>
+</body>
+</html>

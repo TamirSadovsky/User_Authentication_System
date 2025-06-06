@@ -10,6 +10,7 @@ from config import Config
 
  
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 app.register_blueprint(app_routes)
 
 app.config.from_object(Config)

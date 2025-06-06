@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Authentication</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="container">
+    <h2>User Authentication</h2>
+    <div class="form-toggle">
+      <button id="show-login">Login</button>
+      <button id="show-signup">Sign Up</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form active">
+      <h3>Login</h3>
+      <input type="email" id="login-email" placeholder="Email" required />
+
+      <div class="password-field">
+        <input type="password" id="login-password" placeholder="Password" required />
+        <span class="toggle-password" data-target="login-password">
+          <img src="eye.png" alt="Show Password" />
+        </span>
+      </div>
+
+      <label style="display: flex; align-items: center; gap: 5px; margin-top: 10px;">
+        <input type="checkbox" id="remember-me" />
+        Remember Me
+      </label>
+      <button type="submit">Login</button>
+      <p class="message" id="login-msg"></p>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signup-form" class="auth-form">
+      <h3>Sign Up</h3>
+      <input type="email" id="signup-email" placeholder="Email" required />
+      <div class="password-field">
+        <input type="password" id="signup-password" placeholder="Password" required />
+        <span class="toggle-password" data-target="signup-password">
+          <img src="eye.png" alt="Show Password" />
+        </span>
+      </div>
+
+      <div class="password-field">
+        <input type="password" id="signup-confirm" placeholder="Confirm Password" required />
+        <span class="toggle-password" data-target="signup-confirm">
+          <img src="eye.png" alt="Show Password" />
+        </span>
+      </div>
+      <ul id="password-rules" style="text-align:left; font-size: 0.9em; color: #666; margin-top: -5px;">
+        <li id="rule-length"> At least 8 characters</li>
+        <li id="rule-upper"> One uppercase letter</li>
+        <li id="rule-lower"> One lowercase letter</li>
+        <li id="rule-digit"> One number</li>
+        <li id="rule-special"> One special character (!@#$%^&*)</li>
+      </ul>
+
+      <button type="button" id="signup-btn">Sign Up</button>
+      <p class="message" id="signup-msg"></p>
+    </form>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
