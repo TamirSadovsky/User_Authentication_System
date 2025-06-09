@@ -1,20 +1,18 @@
-from flask import Blueprint, request, jsonify
-from models import User, db
-from utils.validators import is_valid_email, is_valid_password
+from flask import Blueprint, request, jsonify, render_template, current_app
+from models import User
+from utils.validators import is_valid_email, is_valid_password, is_valid_israeli_phone
+from utils.email_utils import send_verification_email, generate_verification_code
 from datetime import datetime, timedelta
+from extensions import db, bcrypt, limiter
+from flask_limiter.util import get_remote_address
 from flask_jwt_extended import (
     create_access_token,
     get_jwt,
     get_jwt_identity,
-    unset_jwt_cookies,
     jwt_required,
-    JWTManager,
-)  # pip install Flask-JWT-Extended
+)
 import uuid
 import bcrypt
-from utils.email_utils import send_verification_email, generate_verification_code
-from flask import render_template
-
 
 app_routes = Blueprint("app_routes", __name__)
 
@@ -31,7 +29,7 @@ def signup():
         password = request.json.get("password")
         if not email or not password:
             return jsonify({"error": "Missing credentials"}), 400
-        # Check if the email already exists
+
         existing_user = User.query.filter_by(email=email.lower()).first()
         if existing_user:
             return jsonify({"error": "Email already exists"}), 400
@@ -39,15 +37,13 @@ def signup():
             return jsonify({"error": "Invalid email"}), 400
         if not is_valid_password(password):
             return jsonify({"error": "Invalid password"}), 400
-        # Generate a unique user ID
+
         user_id = str(uuid.uuid4())
-        # Hash the password using bcrypt
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(password.encode(), salt).decode()
         verification_token = str(uuid.uuid4())
         send_verification_email(email, verification_token)
 
-        # Create a new user instance
         user = User(
             id=user_id,
             email=email.lower(),
@@ -65,15 +61,19 @@ def signup():
 
 
 @app_routes.route("/logintoken", methods=["POST"])
+@limiter.limit(
+    "3 per minute",
+    key_func=lambda: f"{get_remote_address()}:{request.json.get('email', 'unknown')}",
+)
 def create_token():
     email = request.json.get("email", None)
     password = request.json.get("password", None)
-    remember = request.json.get("remember", False)  # ⬅️ חדש
+    remember = request.json.get("remember", False)
 
     if email is None or password is None:
         return jsonify({"error": "Missing Credentials"}), 401
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=email.lower()).first()
     if user is None:
         return jsonify({"error": "User not found"}), 404
     if not user.is_verified:
@@ -91,11 +91,8 @@ def create_token():
 @jwt_required()
 def logout():
     jti = get_jwt()["jti"]
-    # Invalidate the token by adding it to the blacklist
-    jwt.blacklist.add(jti)
-    response = jsonify({"message": "Successfully logged out"})
-    unset_jwt_cookies(response)
-    return response, 200
+    current_app.jwt_blacklist.add(jti)
+    return jsonify({"message": "Successfully logged out"}), 200
 
 
 @app_routes.route("/profile", methods=["GET"])
@@ -122,17 +119,50 @@ def update_profile():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": "User not found"}), 405
 
-    # Update user profile information
-    user.full_name = request.json.get("full_name", user.full_name)
-    user.phone_number = request.json.get("phone_number", user.phone_number)
-    user.address = request.json.get("address", user.address)
+    full_name = request.json.get("full_name", user.full_name)
+    phone_number = request.json.get("phone_number", user.phone_number)
+    address = request.json.get("address", user.address)
+
+    if full_name and len(full_name) > 20:
+        return jsonify({"error": "Full name must be 20 characters or fewer"}), 402
+
+    if address and len(address) > 20:
+        return jsonify({"error": "Address must be 20 characters or fewer"}), 403
+
+    if phone_number and not is_valid_israeli_phone(phone_number):
+        return jsonify({"error": "Invalid Israeli phone number"}), 404
+
+    user.full_name = full_name
+    user.phone_number = phone_number
+    user.address = address
 
     db.session.commit()
     return jsonify({"message": "Profile updated successfully"}), 200
 
+@app_routes.route("/verify", methods=["GET"])
+def verify_email():
+    token = request.args.get("token")
+    if not token:
+        return jsonify({"error": "Missing token"}), 400
 
+    user = User.query.filter_by(verification_token=token).first()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 404
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expiry = None
+    db.session.commit()
+
+    return render_template("verify_success.html", email=user.email)
+
+
+"""
+------ Didn't use it but obviously can easily applied on the login route if the user didnt get the verification email ------
+This route allows a user to resend a verification email if their email is not already verified.
+"""
 @app_routes.route("/resend_verification", methods=["POST"])
 def resend_verification():
     email = request.json.get("email")
@@ -154,27 +184,11 @@ def resend_verification():
     return jsonify({"message": "Verification email resent"}), 200
 
 
-@app_routes.route("/password_reset", methods=["POST"])
-def password_reset():
-    email = request.json.get("email")
-    if email is None:
-        return jsonify({"error": "Missing email"}), 400
-    user = User.query.filter_by(email=email).first()
-    if user is None:
-        return jsonify({"error": "User not found"}), 404
-    if not user.is_verified:
-        return jsonify({"error": "Email not verified"}), 403
-    # Generate a password reset token
-    reset_token = generate_verification_code()
-    send_verification_email(email, reset_token)
-
-    user.verification_token = reset_token
-    user.verification_token_expiry = datetime.utcnow() + timedelta(hours=1)
-    db.session.commit()
-
-    return jsonify({"message": "Password reset email sent"}), 200
-
-
+"""
+------ Didn't use it but can be used in the future ------
+This route allows a user to reset their password by providing their email, a new password, and a verification code received via email.
+It verifies the code, securely updates the password using bcrypt, and clears the verification token to prevent reuse.
+"""
 @app_routes.route("/reset_password", methods=["POST"])
 def reset_password():
     email = request.json.get("email")
@@ -190,7 +204,6 @@ def reset_password():
     if code != user.verification_token:
         return jsonify({"error": "Invalid verification code"}), 400
 
-    # Hash the new password
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(new_password.encode(), salt).decode()
 
@@ -200,21 +213,3 @@ def reset_password():
     db.session.commit()
 
     return jsonify({"message": "Password reset successfully"}), 200
-
-
-@app_routes.route("/verify", methods=["GET"])
-def verify_email():
-    token = request.args.get("token")
-    if not token:
-        return jsonify({"error": "Missing token"}), 400
-
-    user = User.query.filter_by(verification_token=token).first()
-    if not user:
-        return jsonify({"error": "Invalid token"}), 404
-
-    user.is_verified = True
-    user.verification_token = None
-    user.verification_token_expiry = None
-    db.session.commit()
-
-    return render_template("verify_success.html", email=user.email)

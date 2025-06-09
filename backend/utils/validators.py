@@ -15,11 +15,22 @@ def is_valid_email(email: str) -> bool:
         return False
 
 def is_valid_password(password: str) -> bool:
-    # Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, one digit, and one special character
-    if (len(password) < 8 or 
-        not re.search(r"[A-Z]", password) or 
-        not re.search(r"[a-z]", password) or 
+    if (
+        len(password) < 8 or 
         not re.search(r"[0-9]", password) or 
-        not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)):
+        not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password) or 
+        not re.search(r"[a-zA-Z\u0590-\u05FF]", password)  # תו אות עברית או אנגלית
+    ):
         return False
     return True
+
+def is_valid_israeli_phone(number: str) -> bool:
+    """Validate an Israeli phone number."""
+    number = number.strip().replace(" ", "")  # Remove spaces
+
+    # Convert +972 format to local 05X format
+    if number.startswith("+972"):
+        number = "0" + number[4:]
+
+    pattern = r"^05[012345689]\d{7}$"
+    return bool(re.match(pattern, number))

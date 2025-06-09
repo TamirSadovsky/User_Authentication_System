@@ -20,7 +20,6 @@
     <form id="login-form" class="auth-form active">
       <h3>Login</h3>
       <input type="email" id="login-email" placeholder="Email" required />
-
       <div class="password-field">
         <input type="password" id="login-password" placeholder="Password" required />
         <span class="toggle-password" data-target="login-password">
@@ -28,7 +27,7 @@
         </span>
       </div>
 
-      <label style="display: flex; align-items: center; gap: 5px; margin-top: 10px;">
+      <label style="display: flex; align-items: center; gap: 5px; margin-top: 10px; font-weight: normal;">
         <input type="checkbox" id="remember-me" />
         Remember Me
       </label>
@@ -53,18 +52,19 @@
           <img src="eye.png" alt="Show Password" />
         </span>
       </div>
+
       <ul id="password-rules" style="text-align:left; font-size: 0.9em; color: #666; margin-top: -5px;">
-        <li id="rule-length"> At least 8 characters</li>
-        <li id="rule-upper"> One uppercase letter</li>
-        <li id="rule-lower"> One lowercase letter</li>
-        <li id="rule-digit"> One number</li>
-        <li id="rule-special"> One special character (!@#$%^&*)</li>
+        <li id="rule-length">At least 8 characters</li>
+        <li id="rule-upper">One uppercase letter</li>
+        <li id="rule-lower">One lowercase letter</li>
+        <li id="rule-digit">One number</li>
+        <li id="rule-special">One special character</li>
+        <li id="rule-language">Letters can be in English or Hebrew</li>
       </ul>
 
       <button type="button" id="signup-btn">Sign Up</button>
       <p class="message" id="signup-msg"></p>
     </form>
-
   </div>
 
   <script src="script.js"></script>
